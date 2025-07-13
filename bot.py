@@ -37,6 +37,10 @@ async def acessar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(mensagem)
 
+# Comando /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Fala jogador! ⚽🥇 Bem-vindo ao Telegram Bet! A Bet OFICIAL no telegram")
+
 # Início do bot
 if __name__ == "__main__":
     from dotenv import load_dotenv
@@ -45,6 +49,8 @@ if __name__ == "__main__":
     TOKEN = os.environ["BOT_TOKEN"]
     app = ApplicationBuilder().token(TOKEN).build()
 
+    app.add_handler(CommandHandler("start", start))
+    
     # Adiciona o comando /acessar
     app.add_handler(CommandHandler("acessar", acessar))
 

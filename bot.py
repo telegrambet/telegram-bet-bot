@@ -43,17 +43,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Início do bot
 if __name__ == "__main__":
-    from dotenv import load_dotenv
-    load_dotenv()
+    from dotenv import load_dotenv
+    load_dotenv()
 
-    TOKEN = os.environ["BOT_TOKEN"]
-    app = ApplicationBuilder().token(TOKEN).build()
+    TOKEN = os.environ["BOT_TOKEN"]
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    
-    # Adiciona o comando /acessar
-    app.add_handler(CommandHandler("acessar", acessar))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("acessar", acessar))
 
-    print("Bot rodando...")
-    app.run_polling()
+    print("Bot rodando...")
+    app.run_polling()
+
   

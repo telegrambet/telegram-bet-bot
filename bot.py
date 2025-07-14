@@ -24,15 +24,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor.execute("INSERT INTO usuarios (id_telegram, nome, saldo) VALUES (?, ?, ?)",
                        (id_telegram, nome, 0))
         conn.commit()
+        saldo = 0
+    else:
+        saldo = usuario[2]  # índice 2 = campo "saldo"
 
     conn.close()
 
-    # Mensagem final com boas-vindas e dados
+    # Mensagem com saldo incluído
     mensagem = (
         "Fala jogador! ⚽🥇 Bem-vindo ao Telegram Bet! A Bet OFICIAL no telegram\n\n"
         "✅ Acesso liberado com sucesso\n"
         f"👤 Nome: {nome}\n"
-        f"🆔 ID: {id_telegram}"
+        f"🆔 ID: {id_telegram}\n"
+        f"💵 Saldo: R$ {saldo:.2f}"
     )
 
     # Botões do menu principal
@@ -45,6 +49,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(botoes, resize_keyboard=True)
 
     await update.message.reply_text(mensagem, reply_markup=reply_markup)
+
 
 # ⚠️ Criar tabela pagamentos (executa só uma vez)
 def criar_tabela_pagamentos():

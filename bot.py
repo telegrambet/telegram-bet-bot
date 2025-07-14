@@ -26,22 +26,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
         saldo = 0
     else:
-        saldo = usuario[2]  # índice 2 = campo "saldo"
+        try:
+            saldo = float(usuario[2])  # índice 2 = saldo
+        except (IndexError, TypeError, ValueError):
+            saldo = 0  # fallback se houver erro
 
     conn.close()
 
-    # Mensagem com saldo incluído
     mensagem = (
-        "Fala jogador(a)! ⚽🥇 Bem-vindo ao Telegram Bet!\n\n"
-         "A Bet OFICIAL no telegram\n\n"
-         
+        "Fala jogador! ⚽🥇 Bem-vindo ao Telegram Bet! A Bet OFICIAL no telegram\n\n"
         "✅ Acesso liberado com sucesso\n"
         f"👤 Nome: {nome}\n"
         f"🆔 ID: {id_telegram}\n"
         f"💵 Saldo: R$ {saldo:.2f}"
     )
 
-    # Botões do menu principal
     botoes = [
         ["💰 Depositar", "💸 Saque"],
         ["📅 Jogos de amanhã", "📆 Jogos do dia"],
@@ -51,7 +50,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(botoes, resize_keyboard=True)
 
     await update.message.reply_text(mensagem, reply_markup=reply_markup)
-
 
 # ⚠️ Criar tabela pagamentos (executa só uma vez)
 def criar_tabela_pagamentos():

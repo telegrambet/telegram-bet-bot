@@ -36,8 +36,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Acesso liberado com sucesso\n"
         f"👤 Nome: {nome}\n"
         f"🆔 ID: {id_telegram}\n"
-        
-        "Carteira 💸"
         f"💵 Saldo: R$ {saldo:.2f}"
     )
 

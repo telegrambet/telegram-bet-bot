@@ -1,5 +1,5 @@
 import os
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import sqlite3
 
@@ -7,7 +7,7 @@ import sqlite3
 def conectar():
     return sqlite3.connect("apostas.db")
 
-# Comando /start (também registra e faz login)
+# Comando /start (também faz o login)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     nome = update.effective_user.first_name
     id_telegram = update.effective_user.id
@@ -21,10 +21,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Se não existir, cadastra com saldo 0
     if not usuario:
-        cursor.execute(
-            "INSERT INTO usuarios (id_telegram, nome, saldo) VALUES (?, ?, ?)",
-            (id_telegram, nome, 0)
-        )
+        cursor.execute("INSERT INTO usuarios (id_telegram, nome, saldo) VALUES (?, ?, ?)",
+                       (id_telegram, nome, 0))
         conn.commit()
 
     conn.close()
@@ -37,7 +35,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🆔 ID: {id_telegram}"
     )
 
-    await update.message.reply_text(mensagem)
+    # Botões do menu principal
+    botoes = [
+        ["💰 Depositar", "💸 Saque"],
+        ["📅 Jogos de amanhã", "📆 Jogos do dia"],
+        ["🔴 Jogos ao vivo"],
+        ["🎟 Meus bilhetes", "📊 Processado"]
+    ]
+    reply_markup = ReplyKeyboardMarkup(botoes, resize_keyboard=True)
+
+    await update.message.reply_text(mensagem, reply_markup=reply_markup)
 
 # Início do bot
 if __name__ == "__main__":
@@ -46,8 +53,9 @@ if __name__ == "__main__":
 
     TOKEN = os.environ["BOT_TOKEN"]
     app = ApplicationBuilder().token(TOKEN).build()
+
+    # /start é o único comando necessário
     app.add_handler(CommandHandler("start", start))
 
     print("Bot rodando...")
     app.run_polling()
-  

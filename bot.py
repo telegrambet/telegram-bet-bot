@@ -32,7 +32,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Mensagem com saldo incluído
     mensagem = (
-        "Fala jogador(a)! ⚽🥇 Bem-vindo ao Telegram Bet! A Bet OFICIAL no telegram\n\n"
+        "Fala jogador(a)! ⚽🥇 Bem-vindo ao Telegram Bet! 
+         A Bet OFICIAL no telegram\n\n"
+         
         "✅ Acesso liberado com sucesso\n"
         f"👤 Nome: {nome}\n"
         f"🆔 ID: {id_telegram}\n"

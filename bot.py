@@ -1,16 +1,65 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-import requests
 import os
 import sqlite3
+import requests
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters
+)
 
+# Banco e Mercado Pago
 MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
 DB_PATH = "apostas.db"
 
 def conectar():
     return sqlite3.connect(DB_PATH)
 
-# Criar cobrança Pix Mercado Pago
+# Comando /start (também faz o login)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    nome = update.effective_user.first_name
+    id_telegram = update.effective_user.id
+
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM usuarios WHERE id_telegram = ?", (id_telegram,))
+    usuario = cursor.fetchone()
+
+    if not usuario:
+        cursor.execute("INSERT INTO usuarios (id_telegram, nome, saldo) VALUES (?, ?, ?)",
+                       (id_telegram, nome, 0))
+        conn.commit()
+        saldo = 0
+    else:
+        try:
+            saldo = float(usuario[2])
+        except (IndexError, TypeError, ValueError):
+            saldo = 0
+
+    conn.close()
+
+    mensagem = (
+        "Fala jogador! ⚽🥇 Bem-vindo ao Telegram Bet! A Bet OFICIAL no telegram\n\n"
+        "✅ Acesso liberado com sucesso\n"
+        f"👤 Nome: {nome}\n"
+        f"🆔 ID: {id_telegram}\n"
+        f"💵 Saldo: R$ {saldo:.2f}"
+    )
+
+    botoes = [
+        ["💰 Depositar", "💸 Saque"],
+        ["📅 Jogos de amanhã", "📆 Jogos do dia"],
+        ["🔴 Jogos ao vivo"],
+        ["🎟 Meus bilhetes", "📊 Processado"]
+    ]
+    reply_markup = ReplyKeyboardMarkup(botoes, resize_keyboard=True)
+
+    await update.message.reply_text(mensagem, reply_markup=reply_markup)
+
+# Criação de cobrança via Pix (Mercado Pago)
 def criar_cobranca_pix(valor, external_reference):
     url = "https://api.mercadopago.com/v1/payments"
     headers = {
@@ -45,7 +94,7 @@ def adicionar_pagamento(id_telegram, payment_id, valor):
     conn.commit()
     conn.close()
 
-# Handler do botão Depositar (exibir opções)
+# Mostrar opções de depósito
 async def mostrar_opcoes_deposito(update, context):
     keyboard = [
         [InlineKeyboardButton("R$ 5,00", callback_data="deposit_5")],
@@ -57,10 +106,9 @@ async def mostrar_opcoes_deposito(update, context):
         [InlineKeyboardButton("R$ 1.000,00", callback_data="deposit_1000")],
         [InlineKeyboardButton("Digite outro valor", callback_data="deposit_custom")],
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Escolha o valor para depositar:", reply_markup=reply_markup)
+    await update.message.reply_text("Escolha o valor para depositar:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# Callback para tratar seleção do valor
+# Callback dos valores fixos ou opção personalizada
 async def deposito_callback(update, context):
     query = update.callback_query
     await query.answer()
@@ -75,7 +123,7 @@ async def deposito_callback(update, context):
             valor = int(valor_str)
             await criar_e_enviar_cobranca(query, context, valor)
 
-# Receber valor digitado pelo usuário
+# Valor digitado manualmente
 async def receber_valor_deposito(update, context):
     if context.user_data.get("awaiting_deposit_value"):
         texto = update.message.text.replace(",", ".").strip()
@@ -89,21 +137,17 @@ async def receber_valor_deposito(update, context):
         except ValueError:
             await update.message.reply_text("Valor inválido. Digite um número válido (ex: 20, 50, 100):")
 
-# Criar cobrança e enviar QR code
+# Geração de cobrança + botão "Já paguei"
 async def criar_e_enviar_cobranca(update_or_query, context, valor):
     user_id = update_or_query.from_user.id
     qr_code, payment_id = criar_cobranca_pix(valor, external_reference=user_id)
     if qr_code:
         adicionar_pagamento(user_id, payment_id, valor)
-
         mensagem = (
             f"Para depositar R${valor:.2f}, pague via Pix usando o código abaixo:\n\n{qr_code}\n\n"
             "Quando pagar, clique no botão abaixo para confirmar."
         )
-
-        keyboard = [
-            [InlineKeyboardButton("Já paguei", callback_data=f"checkpay_{payment_id}")]
-        ]
+        keyboard = [[InlineKeyboardButton("✅ Já paguei", callback_data=f"checkpay_{payment_id}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         if hasattr(update_or_query, "edit_message_text"):
@@ -111,20 +155,15 @@ async def criar_e_enviar_cobranca(update_or_query, context, valor):
         else:
             await update_or_query.message.reply_text(mensagem, reply_markup=reply_markup)
     else:
-        if hasattr(update_or_query, "edit_message_text"):
-            await update_or_query.edit_message_text("Erro ao gerar cobrança. Tente novamente mais tarde.")
-        else:
-            await update_or_query.message.reply_text("Erro ao gerar cobrança. Tente novamente mais tarde.")
+        await update_or_query.message.reply_text("Erro ao gerar cobrança. Tente novamente mais tarde.")
 
-# Callback para botão "Já paguei"
+# Verificar pagamento via botão "Já paguei"
 async def check_payment(update, context):
     query = update.callback_query
     await query.answer()
     data = query.data
-
     if data.startswith("checkpay_"):
         payment_id = data.split("_")[1]
-
         url = f"https://api.mercadopago.com/v1/payments/{payment_id}"
         headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
         r = requests.get(url, headers=headers)
@@ -140,33 +179,63 @@ async def check_payment(update, context):
             pagamento_db = cursor.fetchone()
             conn.close()
 
-            if pagamento_db and pagamento_db[4] != status:  # índice 4 = status
+            if pagamento_db and pagamento_db[4] != status:
                 conn = conectar()
                 cursor = conn.cursor()
-                cursor.execute(
-                    "UPDATE pagamentos SET status = ? WHERE payment_id = ?", (status, payment_id)
-                )
+                cursor.execute("UPDATE pagamentos SET status = ? WHERE payment_id = ?", (status, payment_id))
                 conn.commit()
-                conn.close()
-
                 if status == "approved":
-                    conn = conectar()
-                    cursor = conn.cursor()
                     cursor.execute("SELECT saldo FROM usuarios WHERE id_telegram = ?", (user_id,))
                     res = cursor.fetchone()
                     saldo_atual = float(res[0]) if res else 0.0
                     novo_saldo = saldo_atual + float(pagamento_db[3])
-                    cursor.execute(
-                        "UPDATE usuarios SET saldo = ? WHERE id_telegram = ?", (novo_saldo, user_id)
-                    )
+                    cursor.execute("UPDATE usuarios SET saldo = ? WHERE id_telegram = ?", (novo_saldo, user_id))
                     conn.commit()
-                    conn.close()
-                    await query.edit_message_text("Pagamento aprovado! Saldo atualizado com sucesso.")
+                    await query.edit_message_text("✅ Pagamento aprovado! Saldo atualizado com sucesso.")
                 elif status in ["pending", "in_process"]:
-                    await query.edit_message_text("Pagamento ainda não confirmado. Por favor, aguarde.")
+                    await query.edit_message_text("⌛ Pagamento ainda pendente. Aguarde um instante.")
                 else:
-                    await query.edit_message_text(f"Pagamento com status: {status}.")
+                    await query.edit_message_text(f"⚠️ Pagamento com status: {status}")
+                conn.close()
             else:
-                await query.edit_message_text("Pagamento já está atualizado ou não encontrado.")
+                await query.edit_message_text("Pagamento já foi processado ou não encontrado.")
         else:
-            await query.edit_message_text("Erro ao consultar pagamento. Tente novamente mais tarde.")
+            await query.edit_message_text("Erro ao consultar pagamento. Tente mais tarde.")
+
+# ⚠️ Criar tabela pagamentos (executa uma vez)
+def criar_tabela_pagamentos():
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pagamentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_telegram INTEGER,
+            payment_id TEXT,
+            valor REAL,
+            status TEXT,
+            data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print("✅ Tabela pagamentos criada com sucesso!")
+
+criar_tabela_pagamentos()
+
+# Rodar o bot
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    TOKEN = os.environ["BOT_TOKEN"]
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(deposito_callback, pattern="^deposit_"))
+    app.add_handler(CallbackQueryHandler(check_payment, pattern="^checkpay_"))
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("💰 Depositar"), mostrar_opcoes_deposito))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), receber_valor_deposito))
+
+    print("🤖 Bot rodando...")
+    app.run_polling()
+                              

@@ -11,17 +11,15 @@ from telegram.ext import (
     filters
 )
 
-# Banco e Mercado Pago
 MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
 DB_PATH = "apostas.db"
 
 def conectar():
     return sqlite3.connect(DB_PATH)
 
-# Comando /start (também faz o login)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    nome = update.effective_user.first_name
-    id_telegram = update.effective_user.id
+    nome = update.effective_user.first_name
+    id_telegram = update.effective_user.id
 
     conn = conectar()
     cursor = conn.cursor()
@@ -29,8 +27,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usuario = cursor.fetchone()
 
     if not usuario:
-        cursor.execute("INSERT INTO usuarios (id_telegram, nome, saldo) VALUES (?, ?, ?)",
-                       (id_telegram, nome, 0))
+        cursor.execute("INSERT INTO usuarios (id_telegram, nome, saldo) VALUES (?, ?, ?)", (id_telegram, nome, 0))
         conn.commit()
         saldo = 0
     else:
@@ -59,7 +56,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(mensagem, reply_markup=reply_markup)
 
-# Criação de cobrança via Pix (Mercado Pago)
 def criar_cobranca_pix(valor, external_reference):
     url = "https://api.mercadopago.com/v1/payments"
     headers = {
@@ -94,7 +90,6 @@ def adicionar_pagamento(id_telegram, payment_id, valor):
     conn.commit()
     conn.close()
 
-# Mostrar opções de depósito
 async def mostrar_opcoes_deposito(update, context):
     keyboard = [
         [InlineKeyboardButton("R$ 5,00", callback_data="deposit_5")],
@@ -108,7 +103,6 @@ async def mostrar_opcoes_deposito(update, context):
     ]
     await update.message.reply_text("Escolha o valor para depositar:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# Callback dos valores fixos ou opção personalizada
 async def deposito_callback(update, context):
     query = update.callback_query
     await query.answer()
@@ -123,7 +117,6 @@ async def deposito_callback(update, context):
             valor = int(valor_str)
             await criar_e_enviar_cobranca(query, context, valor)
 
-# Valor digitado manualmente
 async def receber_valor_deposito(update, context):
     if context.user_data.get("awaiting_deposit_value"):
         texto = update.message.text.replace(",", ".").strip()
@@ -137,7 +130,6 @@ async def receber_valor_deposito(update, context):
         except ValueError:
             await update.message.reply_text("Valor inválido. Digite um número válido (ex: 20, 50, 100):")
 
-# Geração de cobrança + botão "Já paguei"
 async def criar_e_enviar_cobranca(update_or_query, context, valor):
     user_id = update_or_query.from_user.id
     qr_code, payment_id = criar_cobranca_pix(valor, external_reference=user_id)
@@ -157,7 +149,6 @@ async def criar_e_enviar_cobranca(update_or_query, context, valor):
     else:
         await update_or_query.message.reply_text("Erro ao gerar cobrança. Tente novamente mais tarde.")
 
-# Verificar pagamento via botão "Já paguei"
 async def check_payment(update, context):
     query = update.callback_query
     await query.answer()
@@ -202,7 +193,6 @@ async def check_payment(update, context):
         else:
             await query.edit_message_text("Erro ao consultar pagamento. Tente mais tarde.")
 
-# ⚠️ Criar tabela pagamentos (executa uma vez)
 def criar_tabela_pagamentos():
     conn = conectar()
     cursor = conn.cursor()
@@ -222,7 +212,6 @@ def criar_tabela_pagamentos():
 
 criar_tabela_pagamentos()
 
-# Rodar o bot
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
@@ -238,4 +227,3 @@ if __name__ == "__main__":
 
     print("🤖 Bot rodando...")
     app.run_polling()
-                              

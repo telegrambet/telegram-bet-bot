@@ -37,7 +37,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👤 Nome: {nome}\n"
         f"🆔 ID: {id_telegram}\n"
         
-        Carteira 💸
+        "Carteira 💸"
         f"💵 Saldo: R$ {saldo:.2f}"
     )
 

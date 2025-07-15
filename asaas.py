@@ -94,22 +94,24 @@ async def receber_valor_manual(update, context):
             await update.message.reply_text("Valor inválido. Digite um número como 10, 25.50, etc:")
 
 async def gerar_cobranca(update_or_query, context, valor):
-    if hasattr(update_or_query, "from_user"):
-        user = update_or_query.from_user
-    else:
+    if hasattr(update_or_query, "callback_query"):
         user = update_or_query.callback_query.from_user
+        mensagem_func = update_or_query.callback_query.edit_message_text
+    else:
+        user = update_or_query.message.from_user
+        mensagem_func = update_or_query.message.reply_text
 
     user_id = user.id
     nome = user.first_name
 
     cliente_id = criar_cliente_asaas(user_id, nome)
     if not cliente_id:
-        await update_or_query.message.reply_text("Erro ao criar cobrança. Tente novamente mais tarde.")
+        await mensagem_func("Erro ao criar cobrança. Tente novamente mais tarde.")
         return
 
     payment_id, link = criar_cobranca_pix(cliente_id, valor)
     if not payment_id:
-        await update_or_query.message.reply_text("Erro ao gerar cobrança Pix.")
+        await mensagem_func("Erro ao gerar cobrança Pix.")
         return
 
     adicionar_pagamento(user_id, payment_id, valor)
@@ -120,11 +122,7 @@ async def gerar_cobranca(update_or_query, context, valor):
         [InlineKeyboardButton("✅ Já paguei", callback_data=f"verificar_{payment_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
-    if hasattr(update_or_query, "edit_message_text"):
-        await update_or_query.edit_message_text(mensagem, reply_markup=reply_markup)
-    else:
-        await update_or_query.message.reply_text(mensagem, reply_markup=reply_markup)
+    await mensagem_func(mensagem, reply_markup=reply_markup)
 
 async def verificar_pagamento(update, context):
     query = update.callback_query

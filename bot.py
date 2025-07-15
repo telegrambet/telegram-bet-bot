@@ -90,8 +90,12 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(deposito_callback, pattern="^dep_"))
     app.add_handler(CallbackQueryHandler(verificar_pagamento, pattern="^verificar_"))
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex("💰 Depositar"), mostrar_opcoes_deposito))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), receber_valor_manual))
+
+    # Só aceita texto com valor numérico (ex: 10, 25.50, 7,99)
+    app.add_handler(MessageHandler(
+        filters.TEXT & filters.Regex(r"^\d+([,.]\d{1,2})?$"),
+        receber_valor_manual
+    ))
 
     print("🤖 Bot rodando...")
     app.run_polling()
-    

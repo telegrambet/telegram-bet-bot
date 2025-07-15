@@ -15,7 +15,7 @@ def criar_cliente_asaas(user_id, nome):
     headers = {"Authorization": f"Bearer {ASAAS_API_KEY}"}
     data = {
         "name": f"User_{user_id}_{nome}",
-        "cpfCnpj": "00000000000",
+        "cpfCnpj": "00000000000",  # Fictício, só funciona em contas ASAAS de teste
         "email": f"user{user_id}@telegram.com"
     }
     r = requests.post(url, headers=headers, json=data)
@@ -78,7 +78,7 @@ async def deposito_callback(update, context):
             context.user_data["awaiting_deposit_value"] = True
         else:
             valor = float(valor_str)
-            await gerar_cobranca(update, context, valor)
+            await gerar_cobranca(query, context, valor)
 
 async def receber_valor_manual(update, context):
     if context.user_data.get("awaiting_deposit_value"):
@@ -94,24 +94,30 @@ async def receber_valor_manual(update, context):
             await update.message.reply_text("Valor inválido. Digite um número como 10, 25.50, etc:")
 
 async def gerar_cobranca(update_or_query, context, valor):
-    if hasattr(update_or_query, "callback_query"):
+    if hasattr(update_or_query, "from_user"):
+        user = update_or_query.from_user
+        send_func = update_or_query.message.reply_text
+        edit_func = None
+    elif hasattr(update_or_query, "from_user") is False and hasattr(update_or_query, "message") is False:
         user = update_or_query.callback_query.from_user
-        mensagem_func = update_or_query.callback_query.edit_message_text
+        send_func = update_or_query.callback_query.message.reply_text
+        edit_func = update_or_query.callback_query.edit_message_text
     else:
-        user = update_or_query.message.from_user
-        mensagem_func = update_or_query.message.reply_text
+        user = update_or_query.effective_user
+        send_func = update_or_query.message.reply_text
+        edit_func = None
 
     user_id = user.id
     nome = user.first_name
 
     cliente_id = criar_cliente_asaas(user_id, nome)
     if not cliente_id:
-        await mensagem_func("Erro ao criar cobrança. Tente novamente mais tarde.")
+        await send_func("Erro ao criar cobrança. Tente novamente mais tarde.")
         return
 
     payment_id, link = criar_cobranca_pix(cliente_id, valor)
     if not payment_id:
-        await mensagem_func("Erro ao gerar cobrança Pix.")
+        await send_func("Erro ao gerar cobrança Pix.")
         return
 
     adicionar_pagamento(user_id, payment_id, valor)
@@ -122,36 +128,40 @@ async def gerar_cobranca(update_or_query, context, valor):
         [InlineKeyboardButton("✅ Já paguei", callback_data=f"verificar_{payment_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await mensagem_func(mensagem, reply_markup=reply_markup)
+
+    if edit_func:
+        await edit_func(mensagem, reply_markup=reply_markup)
+    else:
+        await send_func(mensagem, reply_markup=reply_markup)
 
 async def verificar_pagamento(update, context):
     query = update.callback_query
     await query.answer()
-    data = query.data
-    if data.startswith("verificar_"):
-        payment_id = data.split("_")[1]
-        url = f"{ASAAS_ENDPOINT}/payments/{payment_id}"
-        headers = {"Authorization": f"Bearer {ASAAS_API_KEY}"}
-        r = requests.get(url, headers=headers)
-        if r.status_code == 200:
-            status = r.json().get("status")
-            user_id = query.from_user.id
-            valor = float(r.json().get("value", 0))
-            if status == "CONFIRMED":
-                conn = conectar()
-                cursor = conn.cursor()
-                cursor.execute("UPDATE pagamentos SET status = ? WHERE payment_id = ?", (status, payment_id))
-                cursor.execute("SELECT saldo FROM usuarios WHERE id_telegram = ?", (user_id,))
-                row = cursor.fetchone()
-                saldo_atual = float(row[0]) if row else 0.0
-                novo_saldo = saldo_atual + valor
-                cursor.execute("UPDATE usuarios SET saldo = ? WHERE id_telegram = ?", (novo_saldo, user_id))
-                conn.commit()
-                conn.close()
-                await query.edit_message_text("✅ Pagamento confirmado! Saldo atualizado com sucesso.")
-            elif status == "PENDING":
-                await query.edit_message_text("Pagamento ainda está pendente. Aguarde alguns minutos.")
-            else:
-                await query.edit_message_text(f"Status do pagamento: {status}")
+    payment_id = query.data.split("_")[1]
+    url = f"{ASAAS_ENDPOINT}/payments/{payment_id}"
+    headers = {"Authorization": f"Bearer {ASAAS_API_KEY}"}
+    r = requests.get(url, headers=headers)
+
+    if r.status_code == 200:
+        status = r.json().get("status")
+        user_id = query.from_user.id
+        valor = float(r.json().get("value", 0))
+
+        if status == "CONFIRMED":
+            conn = conectar()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE pagamentos SET status = ? WHERE payment_id = ?", (status, payment_id))
+            cursor.execute("SELECT saldo FROM usuarios WHERE id_telegram = ?", (user_id,))
+            row = cursor.fetchone()
+            saldo_atual = float(row[0]) if row else 0.0
+            novo_saldo = saldo_atual + valor
+            cursor.execute("UPDATE usuarios SET saldo = ? WHERE id_telegram = ?", (novo_saldo, user_id))
+            conn.commit()
+            conn.close()
+            await query.edit_message_text("✅ Pagamento confirmado! Saldo atualizado com sucesso.")
+        elif status == "PENDING":
+            await query.edit_message_text("⌛ Pagamento ainda está pendente. Aguarde alguns minutos.")
         else:
-            await query.edit_message_text("Erro ao consultar o pagamento. Tente mais tarde.")
+            await query.edit_message_text(f"Status do pagamento: {status}")
+    else:
+        await query.edit_message_text("Erro ao consultar o pagamento. Tente mais tarde.")

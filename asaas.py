@@ -1,4 +1,3 @@
-
 import os
 import requests
 import sqlite3
@@ -34,14 +33,14 @@ def criar_cobranca_pix(cliente_id, valor):
         "billingType": "PIX",
         "value": valor,
         "dueDate": "2025-12-31",
-        "description": "DepÃ³sito Telegram Bet"
+        "description": "Depósito Telegram Bet"
     }
     r = requests.post(url, headers=headers, json=data)
     if r.status_code in [200, 201]:
         resposta = r.json()
         return resposta["id"], resposta["invoiceUrl"]
     else:
-        print("Erro ao criar cobranÃ§a:", r.text)
+        print("Erro ao criar cobrança:", r.text)
         return None, None
 
 def adicionar_pagamento(id_telegram, payment_id, valor):
@@ -75,7 +74,7 @@ async def deposito_callback(update, context):
     if data.startswith("dep_"):
         valor_str = data.split("_")[1]
         if valor_str == "custom":
-            await query.edit_message_text("Digite o valor que deseja depositar (mÃ­nimo R$5):")
+            await query.edit_message_text("Digite o valor que deseja depositar (mínimo R$5):")
             context.user_data["awaiting_deposit_value"] = True
         else:
             valor = float(valor_str)
@@ -87,32 +86,41 @@ async def receber_valor_manual(update, context):
         try:
             valor = float(texto)
             if valor < 5:
-                await update.message.reply_text("O valor mÃ­nimo Ã© R$5. Tente novamente:")
+                await update.message.reply_text("O valor mínimo é R$5. Tente novamente:")
                 return
             context.user_data["awaiting_deposit_value"] = False
             await gerar_cobranca(update, context, valor)
         except:
-            await update.message.reply_text("Valor invÃ¡lido. Digite um nÃºmero como 10, 25.50, etc:")
+            await update.message.reply_text("Valor inválido. Digite um número como 10, 25.50, etc:")
 
 async def gerar_cobranca(update_or_query, context, valor):
-    user = update_or_query.from_user
+    if hasattr(update_or_query, "from_user"):
+        user = update_or_query.from_user
+    else:
+        user = update_or_query.callback_query.from_user
+
     user_id = user.id
     nome = user.first_name
+
     cliente_id = criar_cliente_asaas(user_id, nome)
     if not cliente_id:
-        await update_or_query.message.reply_text("Erro ao criar cobranÃ§a. Tente novamente mais tarde.")
+        await update_or_query.message.reply_text("Erro ao criar cobrança. Tente novamente mais tarde.")
         return
+
     payment_id, link = criar_cobranca_pix(cliente_id, valor)
     if not payment_id:
-        await update_or_query.message.reply_text("Erro ao gerar cobranÃ§a Pix.")
+        await update_or_query.message.reply_text("Erro ao gerar cobrança Pix.")
         return
+
     adicionar_pagamento(user_id, payment_id, valor)
-    mensagem = f"Para depositar R${valor:.2f}, clique no botÃ£o abaixo para pagar via Pix:"
+
+    mensagem = f"Para depositar R${valor:.2f}, clique no botão abaixo para pagar via Pix:"
     keyboard = [
-        [InlineKeyboardButton("Pagar agora ðŸ’¸", url=link)],
-        [InlineKeyboardButton("âœ… JÃ¡ paguei", callback_data=f"verificar_{payment_id}")]
+        [InlineKeyboardButton("Pagar agora 💸", url=link)],
+        [InlineKeyboardButton("✅ Já paguei", callback_data=f"verificar_{payment_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     if hasattr(update_or_query, "edit_message_text"):
         await update_or_query.edit_message_text(mensagem, reply_markup=reply_markup)
     else:
@@ -142,9 +150,9 @@ async def verificar_pagamento(update, context):
                 cursor.execute("UPDATE usuarios SET saldo = ? WHERE id_telegram = ?", (novo_saldo, user_id))
                 conn.commit()
                 conn.close()
-                await query.edit_message_text("âœ… Pagamento confirmado! Saldo atualizado com sucesso.")
+                await query.edit_message_text("✅ Pagamento confirmado! Saldo atualizado com sucesso.")
             elif status == "PENDING":
-                await query.edit_message_text("Pagamento ainda estÃ¡ pendente. Aguarde alguns minutos.")
+                await query.edit_message_text("Pagamento ainda está pendente. Aguarde alguns minutos.")
             else:
                 await query.edit_message_text(f"Status do pagamento: {status}")
         else:
